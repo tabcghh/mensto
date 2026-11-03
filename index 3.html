@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>メンスト・アタック</title>
+<meta name="description" content="「メ・ン・ス・ト」だけを30秒でタップする反射神経ゲーム。">
+<meta property="og:title" content="メンスト・アタック">
+<meta property="og:description" content="「メ・ン・ス・ト」だけを30秒でタップする反射神経ゲーム。ランキングで1位をねらおう。">
+<meta name="theme-color" content="#0b1220">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);height:100%}
+body{margin:0;font-size:14px}
+[hidden]{display:none!important}
+</style>
+<style>
+/* Layout: one full-height stage; title / play field / result swap inside a 600px column */
+:root{
+  --bg:#0b1220; --surface:#121a2b; --raise:#1a2439; --line:#27324b;
+  --ink:#eef2fa; --muted:#8a97b3;
+  --accent:#6c9bff; --gold:#f2b84b; --bad:#ff6b6b;
+  --sans:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Noto Sans JP",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:500;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.app{height:100%;display:flex;flex-direction:column;max-width:600px;margin:0 auto;box-sizing:border-box;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px}
+.screen{flex:1;min-height:0;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.label{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- title ---------- */
+#title{gap:18px;overflow-y:auto}
+.brand{padding-top:18px;display:flex;flex-direction:column;gap:6px}
+.brand h1{margin:0;font-weight:900;font-size:clamp(56px,18vw,92px);line-height:1;letter-spacing:.06em}
+.brand h1 span{display:inline-block}
+.brand h1 span:last-child{color:var(--accent)}
+.brand-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.sound{font-family:var(--mono);font-size:12px;letter-spacing:.06em;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted)}
+.sound[aria-pressed="true"]{color:var(--ink);border-color:var(--accent)}
+.brand p{margin:0;color:var(--muted);font-size:14px}
+.rules{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.rules div{display:grid;grid-template-columns:7.5em 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;align-items:baseline}
+.rules dt,.rules b{font-weight:700}
+.rules .k{color:var(--muted);font-size:13px}
+.rules .gold{color:var(--gold)} .rules .bad{color:var(--bad)}
+.entry{display:flex;gap:8px}
+.entry input{flex:1;min-width:0;font:inherit;font-size:17px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;padding:13px 14px;-webkit-user-select:text;user-select:text}
+.entry input::placeholder{color:var(--muted)}
+.btn{font-weight:700;font-size:16px;letter-spacing:.04em;border:0;border-radius:10px;padding:13px 22px;
+  background:var(--accent);color:#081024;transition:filter .15s,transform .05s}
+.btn:hover{filter:brightness(1.08)} .btn:active{transform:scale(.98)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.hint{font-size:13px;color:var(--bad);min-height:1em;margin-top:-10px}
+.board{display:flex;flex-direction:column;gap:8px}
+.board header{display:flex;justify-content:space-between;align-items:baseline}
+.board h2{margin:0;font-size:16px;font-weight:700}
+.board ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.board li{display:grid;grid-template-columns:2.4em 1fr auto;gap:10px;align-items:baseline;padding:9px 2px;border-bottom:1px solid var(--line)}
+.board li .r{font-family:var(--mono);color:var(--muted);font-size:13px}
+.board li:nth-child(-n+3) .r{color:var(--gold)}
+.board li .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.board li .s{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.board li.me{background:linear-gradient(90deg,#6c9bff1f,transparent)}
+.board li.me .n{color:var(--accent);font-weight:700}
+.board .empty{color:var(--muted);font-size:13px;padding:12px 0;border-bottom:1px solid var(--line)}
+
+/* ---------- game ---------- */
+#game{gap:10px}
+.hud{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px}
+.hud .score{font-family:var(--mono);font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.hud .chain{text-align:right}
+.hud .chain .num{font-size:22px;line-height:1.1;color:var(--gold)}
+.seq{display:flex;gap:4px}
+.seq span{font-weight:700;font-size:17px;width:32px;height:36px;display:grid;place-items:center;
+  border-bottom:2px solid var(--line);color:var(--muted);transition:color .12s,border-color .12s}
+.seq span.on{color:var(--gold);border-color:var(--gold)}
+.seq span.next{color:var(--ink);border-color:var(--ink)}
+.timebar{height:3px;background:var(--raise);border-radius:2px;overflow:hidden}
+.timebar i{display:block;height:100%;background:var(--accent);transform-origin:left}
+.timebar.hurry i{background:var(--bad)}
+.field{position:relative;flex:1;min-height:0;border-radius:14px;overflow:hidden;touch-action:manipulation;
+  background:radial-gradient(120% 80% at 50% 0%,#16213a 0,var(--surface) 70%);border:1px solid var(--line)}
+.field.shake{animation:shake .22s}
+@keyframes shake{25%{translate:-5px 0}50%{translate:5px 0}75%{translate:-2px 0}}
+.field.flashbad{border-color:var(--bad)}
+.ch{position:absolute;left:0;top:0;display:grid;place-items:center;border-radius:50%;cursor:pointer;
+  font-weight:700;color:var(--ink);background:var(--raise);box-shadow:inset 0 0 0 1px #3a4766, 0 6px 18px #0006;
+  will-change:transform,opacity;line-height:1}
+.ch.pair{box-shadow:inset 0 0 0 2px var(--gold), 0 6px 18px #0006}
+.ch.hit{pointer-events:none;animation:hit .22s forwards}
+.ch.gone{pointer-events:none;animation:gone .2s forwards}
+@keyframes hit{to{opacity:0;scale:1.5}}
+@keyframes gone{to{opacity:0;scale:.6}}
+.link{position:absolute;left:0;top:0;height:2px;background:repeating-linear-gradient(90deg,var(--gold) 0 6px,transparent 6px 11px);
+  transform-origin:0 50%;pointer-events:none;opacity:.7}
+.fx{position:absolute;pointer-events:none;font-family:var(--mono);font-size:16px;white-space:nowrap;animation:rise .7s forwards}
+@keyframes rise{to{translate:0 -42px;opacity:0}}
+.banner{position:absolute;inset:0;display:grid;place-items:center;align-content:center;pointer-events:none;text-align:center;opacity:0}
+.banner b{font-weight:900;font-size:clamp(40px,12vw,68px);letter-spacing:.06em;line-height:1.1}
+.banner small{display:block;font-family:var(--mono);font-size:16px;margin-top:6px}
+.banner.pop{animation:bannerpop .85s forwards}
+@keyframes bannerpop{0%{opacity:0;scale:.92}15%{opacity:1;scale:1}75%{opacity:1}100%{opacity:0}}
+
+/* ---------- result ---------- */
+#result{gap:20px;overflow-y:auto}
+.res-head{padding-top:18px;display:flex;flex-direction:column;gap:4px}
+.res-head .big{font-family:var(--mono);font-size:clamp(56px,17vw,96px);line-height:1;font-variant-numeric:tabular-nums}
+.res-head .rank{font-size:15px;color:var(--gold);min-height:1.4em}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stats div{padding:12px 4px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.stats div+div{border-left:1px solid var(--line);padding-left:12px}
+.stats b{font-family:var(--mono);font-weight:500;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
+.actions{display:flex;gap:10px}
+.actions .btn{flex:1}
+@media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}.stats div:nth-child(3){border-left:0;padding-left:4px}}
+@media (prefers-reduced-motion:reduce){.field.shake{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TITLE -->
+  <section class="screen" id="title">
+    <div class="brand">
+      <div class="brand-top"><span class="label">Reflex game · 30 sec</span><button class="sound" id="soundBtn" type="button" aria-pressed="true">♪ サウンド ON</button></div>
+      <h1><span>メ</span><span>ン</span><span>ス</span><span>ト</span></h1>
+      <p>4つの文字だけを、すばやく正確に。</p>
+    </div>
+    <dl class="rules">
+      <div><dt>メ ン ス ト</dt><dd class="k">正しい文字をタップ　+100</dd></div>
+      <div><dt class="gold">メ→ン→ス→ト</dt><dd class="k">この順で押し切るとボーナス。連続で決めるほど +500、+1000、+1500…と増えていく</dd></div>
+      <div><dt class="gold">2つ同時</dt><dd class="k">金の枠で2文字出たら、押せるのはどちらか1つだけ。次に必要な文字を選ぼう</dd></div>
+      <div><dt class="bad">ソ シ ツ 卜…</dt><dd class="k">ニセモノは −150。メンストの連続も途切れる</dd></div>
+    </dl>
+    <form class="entry" id="entryForm" autocomplete="off">
+      <input id="nick" maxlength="12" placeholder="ニックネーム（12文字まで）" aria-label="ニックネーム">
+      <button class="btn" id="startBtn" type="submit">スタート</button>
+    </form>
+    <div class="hint" id="nickHint"></div>
+    <div class="board">
+      <header><h2>ランキング</h2><span class="label" id="boardNote">読み込み中</span></header>
+      <ol id="board"></ol>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section class="screen" id="game" hidden>
+    <div class="hud">
+      <div><div class="label">Score</div><div class="score" id="score">0</div></div>
+      <div class="seq" id="seq"><span>メ</span><span>ン</span><span>ス</span><span>ト</span></div>
+      <div class="chain"><div class="label">メンスト連続</div><div class="num" id="chain">×0</div></div>
+    </div>
+    <div class="timebar" id="timebar"><i id="timefill"></i></div>
+    <div class="field" id="field"><div class="banner" id="banner"></div></div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen" id="result" hidden>
+    <div class="res-head">
+      <span class="label" id="resName">Result</span>
+      <div class="big" id="resScore">0</div>
+      <div class="rank" id="resRank"></div>
+    </div>
+    <div class="stats">
+      <div>ヒット<b id="stHit">0</b></div>
+      <div>おてつき<b id="stMiss">0</b></div>
+      <div>メンスト<b id="stSeq">0</b></div>
+      <div>最大連続<b id="stChain">0</b></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="retryBtn" type="button">もう一回</button>
+      <button class="btn ghost" id="backBtn" type="button">タイトルへ</button>
+    </div>
+    <div class="board">
+      <header><h2>ランキング</h2><span class="label" id="boardNote2"></span></header>
+      <ol id="board2"></ol>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+const firebaseConfig = {
+  apiKey: "AIzaSyDvKw0HbEaETph3cRQMDuexiwXAzdTvak8",
+  authDomain: "mensto-attack-d1f7b.firebaseapp.com",
+  projectId: "mensto-attack-d1f7b",
+  storageBucket: "mensto-attack-d1f7b.firebasestorage.app",
+  messagingSenderId: "869092534715",
+  appId: "1:869092534715:web:2a0b3dc8ae98784ec33c9e"
+};
+
+const ADMIN_EMAIL = "tabcghh@gmail.com";
+
+const $ = id => document.getElementById(id);
+const DUR = 30000;
+const WORD = ['メ','ン','ス','ト'];
+const FAKES = ['ソ','ソ','シ','ツ','ツ','ヌ','ヌ','卜','卜','ノ','ナ','ク','×','マ','ヘ'];
+const BASE = 100, FAKE_PENALTY = 150, SEQ_BONUS = 500;
+
+/* ---------------- storage ---------------- */
+const ls = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v);}catch(e){return d;} },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+$('nick').value = ls.get('mensto-nick', '');
+
+/* ---------------- ranking (Firebase) ---------------- */
+let db = null, uid = null, online = false;
+let rows = [], lastResult = null;
+
+function cleanName(s){ return (s || '').replace(/[\u0000-\u001f]/g,'').replace(/\s+/g,' ').trim().slice(0,12); }
+
+function renderBoards(){
+  const list = rows.slice(0, 20);
+  for (const [olId, noteId] of [['board','boardNote'],['board2','boardNote2']]) {
+    const ol = $(olId); ol.textContent = '';
+    if (!list.length) {
+      const d = document.createElement('div'); d.className = 'empty';
+      d.textContent = 'まだ記録がありません。最初の1位をねらおう。';
+      ol.appendChild(d);
+    }
+    list.forEach((r, i) => {
+      const li = document.createElement('li');
+      if ((online && r.id === uid) || (!online && lastResult && r.at === lastResult.at)) li.className = 'me';
+      const a = document.createElement('span'); a.className='r'; a.textContent = String(i+1).padStart(2,'0');
+      const b = document.createElement('span'); b.className='n'; b.textContent = r.name || '名無し';
+      const c = document.createElement('span'); c.className='s'; c.textContent = (r.score||0).toLocaleString();
+      li.append(a,b,c); ol.appendChild(li);
+    });
+    $(noteId).textContent = online ? 'みんなの自己ベスト' : 'この端末の記録';
+  }
+  updateRankLine();
+}
+
+function localRows(){ return ls.get('mensto-local', []); }
+function useLocal(note){
+  online = false; rows = localRows(); renderBoards();
+  if (note) $('boardNote').textContent = note;
+}
+
+let fb = {};
+async function initRanking(){
+  let app;
+  try {
+    const [a, au, fs] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"), import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"), import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js")]);
+    fb = { ...a, ...au, ...fs };
+    app = fb.initializeApp(firebaseConfig);
+    db = fb.getFirestore(app);
+  } catch (e) { useLocal('この端末の記録（オンラインに接続できません）'); return; }
+  const { getAuth, signInAnonymously, onAuthStateChanged, onSnapshot, query, collection, orderBy, limit } = fb;
+
+  const auth = getAuth(app);
+  onAuthStateChanged(auth, u => { if (u) uid = u.uid; renderBoards(); });
+  signInAnonymously(auth).catch(() => {});
+
+  online = true;
+  let loaded = false;
+  const timer = setTimeout(() => { if (!loaded) $('boardNote').textContent = '接続できません'; }, 10000);
+  onSnapshot(query(collection(db, 'scores'), orderBy('score','desc'), limit(50)), snap => {
+    loaded = true; clearTimeout(timer);
+    rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderBoards();
+  }, () => { clearTimeout(timer); useLocal('この端末の記録（接続エラー）'); });
+}
+
+async function saveScore(res){
+  const loc = localRows(); loc.push(res); loc.sort((a,b)=>b.score-a.score); ls.set('mensto-local', loc.slice(0,20));
+  if (!online) { rows = localRows(); renderBoards(); return; }
+  if (!uid) { res.failed = 'ランキングに接続できませんでした'; updateRankLine(); return; }
+  const { doc, setDoc, serverTimestamp } = fb;
+  const ref = doc(db, 'scores', uid);
+  // 自己ベストは手元の情報で判断（サーバーへの問い合わせ待ちをなくす）
+  const mine = rows.find(r => r.id === uid);
+  const known = Math.max(mine ? mine.score : -1, ls.get('mensto-best-' + uid, -1));
+  if (known >= 0 && res.score <= known) {
+    res.notBest = known;
+    updateRankLine();
+    // 名前だけ変わっていれば更新（待たない）
+    if (mine && mine.name !== res.name) {
+      setDoc(ref, { name: res.name, score: mine.score, hits: mine.hits ?? 0, at: serverTimestamp() }).catch(() => {});
+    }
+    return;
+  }
+  // 先に画面へ反映してから送信
+  res.newBest = true;
+  ls.set('mensto-best-' + uid, res.score);
+  rows = rows.filter(r => r.id !== uid)
+    .concat([{ id: uid, name: res.name, score: res.score, hits: res.hits }])
+    .sort((a, b) => b.score - a.score);
+  renderBoards();
+  try {
+    await setDoc(ref, { name: res.name, score: res.score, hits: res.hits, at: serverTimestamp() });
+  } catch (e) {
+    res.newBest = false;
+    res.failed = 'ランキングに登録できませんでした';
+    updateRankLine();
+  }
+}
+
+function updateRankLine(){
+  if (!lastResult || $('result').hidden) return;
+  const el = $('resRank');
+  if (lastResult.failed) { el.textContent = lastResult.failed; return; }
+  const idx = online ? rows.findIndex(r => r.id === uid) : rows.findIndex(r => r.at === lastResult.at);
+  if (online && lastResult.notBest != null) {
+    el.textContent = `自己ベスト ${lastResult.notBest.toLocaleString()}` + (idx >= 0 ? ` ・ 現在 ${idx+1}位` : '');
+  } else if (idx >= 0) {
+    el.textContent = (lastResult.newBest ? '自己ベスト更新 ・ ' : '') + `${idx+1}位`;
+  } else if (!el.textContent || el.textContent === '登録中…') {
+    el.textContent = online && !lastResult.newBest ? '登録中…' : 'ランク外';
+  }
+}
+
+/* ---------------- sound ---------------- */
+const MUSIC_VOL = 0.6;
+let ac = null, master = null, sfx = null, music = null, noiseBuf = null;
+let soundOn = ls.get('mensto-sound', true);
+
+function ensureAudio(){
+  if (!soundOn) return;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+  try {
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain(); master.gain.value = 1;
+      const comp = ac.createDynamicsCompressor(); // 音割れ防止
+      comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
+      master.connect(comp).connect(ac.destination);
+      sfx = ac.createGain(); sfx.gain.value = 1; sfx.connect(master);
+      music = ac.createGain(); music.gain.value = MUSIC_VOL; music.connect(master);
+      pump = ac.createGain(); pump.gain.value = 1; pump.connect(music);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.3, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1;
+    }
+    if (ac.state !== 'running') ac.resume();
+  } catch(e){ ac = null; }
+}
+
+// 1音を鳴らす（時刻 t0 は AudioContext の時刻）
+function tone(freq, t0, dur, { type='sine', vol=0.1, bus=null, attack=0.004, slideTo=null } = {}){
+  if (!ac || !soundOn) return;
+  try {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(bus || sfx); o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch(e){}
+}
+function noise(t0, dur, vol, hp=7000, bus=null){
+  if (!ac || !soundOn) return;
+  try {
+    const n = ac.createBufferSource(); n.buffer = noiseBuf;
+    const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    n.connect(f).connect(g).connect(bus || sfx); n.start(t0); n.stop(t0 + dur + 0.02);
+  } catch(e){}
+}
+const now0 = () => ac ? ac.currentTime : 0;
+const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+
+const SFX = {
+  // メ→ン→ス→ト の順に音が上がる
+  hit(step){
+    const t = now0(), f = [988, 1175, 1319, 1568][step] || 880;
+    tone(f, t, .16, { vol:.16 });
+    tone(f*2, t, .08, { vol:.05, type:'triangle' });
+    noise(t, .03, .05, 9000);
+  },
+  hitOff(){ const t = now0(); tone(740, t, .12, { vol:.12 }); },
+  combo(chain){
+    const t = now0(), base = 72 + Math.min(chain-1, 5);
+    [0,4,7,12,16].forEach((iv,i) => tone(midi(base+iv), t + i*.055, .32, { vol:.11, type:'triangle' }));
+    noise(t + .22, .25, .04, 6000);
+  },
+  wrong(){
+    const t = now0();
+    tone(170, t, .22, { vol:.13, type:'sawtooth', slideTo:70 });
+    tone(176, t, .22, { vol:.09, type:'square', slideTo:72 });
+  },
+  count(){ tone(880, now0(), .1, { vol:.1 }); },
+  go(){ const t = now0(); tone(1319, t, .22, { vol:.13 }); tone(1760, t+.05, .2, { vol:.06 }); },
+  timeup(){ const t = now0(); [784,659,523,392].forEach((f,i)=>tone(f, t+i*.09, .25, { vol:.11, type:'triangle' })); },
+  ui(){ tone(1175, now0(), .06, { vol:.07 }); },
+};
+
+/* ---- BGM：Am-F-G-Em のエレクトロ。2周目からリフが入り、時間とともにテンポが上がる ---- */
+let pump = null; // ベースやシンセを、キックに合わせて沈ませる（ポンピング）
+function synth(freq, t0, dur, { type='sawtooth', vol=.1, cutoff=2000, q=1, detune=0, attack=.004, release=null, bus=null, sweepTo=null } = {}){
+  if (!ac || !soundOn) return;
+  try {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0); o.detune.value = detune;
+    f.type = 'lowpass'; f.Q.value = q; f.frequency.setValueAtTime(cutoff, t0);
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+    g.gain.setValueAtTime(vol, t0 + Math.max(attack, dur - (release ?? dur * .6)));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(f).connect(g).connect(bus || pump || music); o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch(e){}
+}
+
+const CHORDS = [[57,60,64],[53,57,60],[55,59,62],[52,55,59]]; // Am F G Em
+const ROOTS  = [45, 41, 43, 40];
+// リフ：[16分の位置, 音, 長さ(16分)]
+const RIFF = [
+  [[0,76,2],[3,76,1],[6,79,2],[9,76,1],[11,74,2],[14,72,2]],
+  [[0,77,2],[3,77,1],[6,76,2],[9,72,1],[11,74,2],[14,72,2]],
+  [[0,79,2],[3,79,1],[6,81,2],[9,79,1],[11,76,2],[14,74,2]],
+  [[0,76,3],[4,79,2],[7,76,1],[8,74,2],[11,71,3],[14,72,2]],
+];
+let bgm = { on:false, bpm:140, step:0, next:0, timer:null };
+
+function scheduleStep(i, t){
+  const bar = Math.floor(i / 16) % 4, s16 = i % 16, loop = Math.floor(i / 64);
+  const s = 60 / bgm.bpm / 4; // 16分の長さ
+  const D = { bus: music };
+  if (s16 % 4 === 0) {                                   // キック（四つ打ち）＋ポンピング
+    tone(1600, t, .012, { ...D, vol:.16, type:'square' });
+    tone(160, t, .14, { ...D, vol:.55, slideTo:55 });
+    if (pump) { try { pump.gain.setValueAtTime(.35, t); pump.gain.linearRampToValueAtTime(1, t + s * 3); } catch(e){} }
+  }
+  if (s16 === 4 || s16 === 12) {                         // クラップ
+    noise(t, .1, .32, 1200, music); noise(t + .012, .12, .22, 1600, music);
+  }
+  noise(t, s16 % 4 === 2 ? .09 : .03, s16 % 4 === 2 ? .2 : .08, 8500, music); // ハット
+  if (s16 % 4 !== 0) {                                   // ベース：拍の裏を刻む
+    synth(midi(ROOTS[bar] + (s16 % 4 === 3 ? 12 : 0)), t, s * .9, { vol:.22, cutoff:900, q:4, sweepTo:300 });
+  }
+  if (s16 === 6 || s16 === 14 || (s16 === 10 && bar % 2)) { // コードのスタブ
+    CHORDS[bar].forEach(n => {
+      synth(midi(n + 12), t, s * 1.6, { vol:.06, cutoff:3200, sweepTo:700, detune:-7 });
+      synth(midi(n + 12), t, s * 1.6, { vol:.06, cutoff:3200, sweepTo:700, detune: 7 });
+    });
+  }
+  if (loop >= 1) {                                       // リフ（2周目から）
+    for (const [pos, n, len] of RIFF[bar]) if (pos === s16) {
+      const d = s * len;
+      synth(midi(n), t, d, { vol:.11, cutoff:2600, q:2, detune:-9, release:d*.4 });
+      synth(midi(n), t, d, { vol:.11, cutoff:2600, q:2, detune: 9, release:d*.4 });
+      synth(midi(n - 12), t, d, { type:'square', vol:.04, cutoff:1500, release:d*.4 });
+    }
+  }
+  if (bar === 3 && s16 >= 12 && loop >= 0) {             // 4小節ごとのフィル
+    noise(t, .06, .14 + (s16 - 12) * .05, 2500, music);
+  }
+}
+function bgmTick(){
+  if (!bgm.on || !ac) return;
+  const spb = 60 / bgm.bpm / 4;
+  while (bgm.next < ac.currentTime + 0.12) {
+    scheduleStep(bgm.step, bgm.next);
+    bgm.step++; bgm.next += spb;
+  }
+}
+function startBgm(){
+  if (!ac || !soundOn) return;
+  stopBgm(true);
+  try { music.gain.cancelScheduledValues(ac.currentTime); music.gain.setValueAtTime(MUSIC_VOL, ac.currentTime); } catch(e){}
+  bgm.on = true; bgm.step = 0; bgm.bpm = 140; bgm.next = ac.currentTime + 0.05;
+  bgm.timer = setInterval(bgmTick, 25); bgmTick();
+}
+function stopBgm(now){
+  bgm.on = false; clearInterval(bgm.timer); bgm.timer = null;
+  if (ac && music && !now) {
+    try { music.gain.setValueAtTime(music.gain.value, ac.currentTime); music.gain.linearRampToValueAtTime(0.0001, ac.currentTime + .4); } catch(e){}
+  }
+}
+
+/* ---- バイブ：Android は振動、iPhone（iOS 18 以降）は軽い触覚フィードバック ---- */
+const hapticLabel = (() => {
+  try {
+    const lab = document.createElement('label');
+    lab.setAttribute('aria-hidden', 'true'); lab.style.display = 'none';
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', '');
+    lab.appendChild(inp); document.body.appendChild(lab); return lab;
+  } catch(e){ return null; }
+})();
+let pendingBuzz = false;
+function buzz(){
+  try { if (navigator.vibrate && navigator.vibrate(70)) return; } catch(e){}
+  pendingBuzz = true; // iPhone は指を離した瞬間に鳴らす
+  setTimeout(fireHaptic, 160);
+}
+function fireHaptic(){
+  if (!pendingBuzz) return; pendingBuzz = false;
+  try { hapticLabel && hapticLabel.click(); } catch(e){}
+}
+document.addEventListener('touchend', fireHaptic, { capture:true, passive:true });
+document.addEventListener('pointerup', fireHaptic, { capture:true, passive:true });
+
+/* ---- サウンド切り替え ---- */
+function drawSoundBtn(){
+  const b = $('soundBtn'); if (!b) return;
+  b.textContent = soundOn ? '♪ サウンド ON' : '♪ サウンド OFF';
+  b.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+}
+$('soundBtn').addEventListener('click', () => {
+  soundOn = !soundOn; ls.set('mensto-sound', soundOn);
+  if (soundOn) { ensureAudio(); SFX.ui(); }
+  else { stopBgm(true); try { ac && ac.suspend(); } catch(e){} try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch(e){} }
+  drawSoundBtn();
+});
+drawSoundBtn();
+
+/* ---------------- game ---------------- */
+const field = $('field');
+let items = [], running = false, startT = 0, last = 0, nextSpawn = 0, st = null, nick = '';
+
+function show(id){ for (const s of ['title','game','result']) $(s).hidden = s !== id; }
+
+$('entryForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const n = cleanName($('nick').value);
+  if (!n) { $('nickHint').textContent = 'ニックネームを入力してください'; $('nick').focus(); return; }
+  $('nickHint').textContent = '';
+  nick = n; ls.set('mensto-nick', n);
+  ensureAudio();
+  startGame();
+});
+$('retryBtn').addEventListener('click', () => { ensureAudio(); startGame(); });
+$('backBtn').addEventListener('click', () => { show('title'); renderBoards(); });
+
+function banner(main, sub, color){
+  const b = $('banner'); b.textContent = '';
+  const m = document.createElement('b'); m.textContent = main; m.style.color = color || 'var(--ink)';
+  b.appendChild(m);
+  if (sub) { const s = document.createElement('small'); s.textContent = sub; s.style.color = color || 'var(--ink)'; b.appendChild(s); }
+  b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+}
+
+function startGame(){
+  show('game');
+  items.forEach(it => it.el.remove()); items = [];
+  field.querySelectorAll('.fx,.link').forEach(n => n.remove());
+  st = { score:0, hits:0, miss:0, seq:0, chain:0, maxChain:0, seqDone:0 };
+  drawHud();
+  $('timefill').style.transform = 'scaleX(1)';
+  $('timebar').classList.remove('hurry');
+  running = false;
+  let n = 3;
+  const tick = () => {
+    if (n > 0) { banner(String(n)); SFX.count(); n--; setTimeout(tick, 650); }
+    else { banner('GO', null, 'var(--accent)'); SFX.go(); begin(); startBgm(); }
+  };
+  tick();
+}
+
+function begin(){
+  running = true;
+  startT = last = performance.now();
+  nextSpawn = startT + 200;
+  requestAnimationFrame(frame);
+}
+
+function drawHud(){
+  $('score').textContent = st.score.toLocaleString();
+  $('chain').textContent = '×' + st.chain;
+  [...$('seq').children].forEach((s,i) => {
+    s.classList.toggle('on', i < st.seq);
+    s.classList.toggle('next', i === st.seq);
+  });
+}
+
+const rand = (a,b) => a + Math.random()*(b-a);
+const pick = arr => arr[(Math.random()*arr.length)|0];
+
+function sizeFor(){
+  const W = field.clientWidth, H = field.clientHeight;
+  return Math.round(Math.max(56, Math.min(88, Math.min(W,H) * 0.16)));
+}
+
+function makeItem(ch, isTarget, kind, size){
+  const el = document.createElement('div');
+  el.className = 'ch'; el.textContent = ch;
+  el.style.width = el.style.height = size + 'px';
+  el.style.fontSize = Math.round(size * 0.56) + 'px';
+  el.setAttribute('role','button'); el.setAttribute('aria-label', ch);
+  const it = { el, ch, target:isTarget, kind, size, born: performance.now(), dead:false, x:0, y:0, vx:0, vy:0 };
+  el.addEventListener('pointerdown', e => { e.preventDefault(); tap(it); });
+  return it;
+}
+
+function setupMotion(it, t, opts = {}){
+  const W = field.clientWidth, H = field.clientHeight, size = it.size, pad = size/2 + 6;
+  if (it.kind === 'pop') {
+    it.x = opts.x ?? rand(pad, W - pad); it.y = opts.y ?? rand(pad, H - pad);
+    it.life = opts.life ?? (1100 - 520 * t);
+  } else if (it.kind === 'dash' || it.kind === 'zig') {
+    const fromLeft = opts.fromLeft ?? Math.random() < .5;
+    const ms = (it.kind === 'zig' ? 1500 : 1300) - 620 * t;
+    it.x = fromLeft ? -size : W + size;
+    it.y = opts.y ?? rand(pad, H - pad);
+    it.vx = (W + size*2) / ms * (fromLeft ? 1 : -1);
+    it.vy = it.kind === 'zig' ? (Math.random()<.5?-1:1) * H / ms * 1.3 : 0;
+  } else {
+    it.x0 = opts.x ?? rand(pad, W - pad); it.x = it.x0; it.y = H + size;
+    it.vy = -(H + size*2) / (2600 - 1100 * t);
+    it.amp = rand(8, 30);
+  }
+}
+
+function addItem(it){
+  place(it, it.kind === 'pop' ? .5 : 1, 1);
+  field.appendChild(it.el);
+  items.push(it);
+}
+
+function spawnSingle(t){
+  const fakeRate = 0.22 + 0.25 * t;
+  const isTarget = Math.random() > fakeRate;
+  const ch = isTarget ? pick(WORD) : pick(FAKES);
+  const r = Math.random();
+  let kind;
+  if (t < 0.15) kind = r < 0.7 ? 'pop' : 'float';
+  else if (t < 0.5) kind = r < 0.45 ? 'pop' : r < 0.8 ? 'dash' : 'float';
+  else kind = r < 0.35 ? 'pop' : r < 0.75 ? 'dash' : r < 0.9 ? 'zig' : 'float';
+  const it = makeItem(ch, isTarget, kind, sizeFor());
+  setupMotion(it, t);
+  addItem(it);
+}
+
+// 2文字同時：どちらか1つしか押せない
+function spawnPair(t){
+  const W = field.clientWidth, H = field.clientHeight, size = sizeFor(), pad = size/2 + 6;
+  const need = WORD[st.seq];
+  let a, b;
+  if (Math.random() < 0.55) {
+    const other = pick(WORD.filter(c => c !== need));
+    [a, b] = [[need, true], [other, true]];
+  } else {
+    [a, b] = [[pick(WORD), true], [pick(FAKES), false]];
+  }
+  if (Math.random() < .5) [a, b] = [b, a];
+  const kind = t > 0.5 && Math.random() < 0.4 ? 'dash' : 'pop';
+  const A = makeItem(a[0], a[1], kind, size), B = makeItem(b[0], b[1], kind, size);
+  A.el.classList.add('pair'); B.el.classList.add('pair');
+  A.partner = B; B.partner = A;
+  if (kind === 'pop') {
+    const gap = size * rand(1.4, 2.4);
+    const cx = rand(pad + gap/2, W - pad - gap/2), cy = rand(pad, H - pad);
+    const life = 1300 - 520 * t;
+    setupMotion(A, t, { x: cx - gap/2, y: cy, life });
+    setupMotion(B, t, { x: cx + gap/2, y: cy, life });
+  } else {
+    const fromLeft = Math.random() < .5;
+    const y = rand(pad + size*0.8, H - pad - size*0.8);
+    setupMotion(A, t, { fromLeft, y: y - size*0.75 });
+    setupMotion(B, t, { fromLeft, y: y + size*0.75 });
+  }
+  const link = document.createElement('div'); link.className = 'link';
+  field.appendChild(link);
+  A.link = link; B.link = link;
+  addItem(A); addItem(B);
+  drawLink(A);
+}
+
+function drawLink(it){
+  const p = it.partner; if (!it.link || !p) return;
+  const dx = p.x - it.x, dy = p.y - it.y, len = Math.hypot(dx, dy);
+  const r = it.size / 2 + 4;
+  if (len <= r * 2) { it.link.style.opacity = 0; return; }
+  const ux = dx/len, uy = dy/len;
+  it.link.style.width = (len - r*2) + 'px';
+  it.link.style.transform = `translate(${it.x + ux*r}px, ${it.y + uy*r - 1}px) rotate(${Math.atan2(dy,dx)}rad)`;
+  it.link.style.opacity = it.el.style.opacity;
+}
+
+function place(it, scale, op){
+  it.el.style.transform = `translate(${it.x - it.size/2}px, ${it.y - it.size/2}px) scale(${scale})`;
+  it.el.style.opacity = op;
+}
+
+function fx(x, y, text, color){
+  const d = document.createElement('div');
+  d.className = 'fx'; d.textContent = text; d.style.color = color;
+  d.style.left = (x - 24) + 'px'; d.style.top = (y - 24) + 'px';
+  field.appendChild(d); setTimeout(() => d.remove(), 700);
+}
+
+function kill(it){ it.dead = true; const i = items.indexOf(it); if (i >= 0) items.splice(i, 1); }
+function dropLink(it){ if (it.link) { it.link.remove(); it.link = null; if (it.partner) it.partner.link = null; } }
+
+function tap(it){
+  if (!running || it.dead) return;
+  kill(it);
+  it.el.classList.add('hit');
+  setTimeout(() => it.el.remove(), 240);
+  if (it.partner && !it.partner.dead) {
+    const p = it.partner; kill(p);
+    p.el.classList.add('gone'); setTimeout(() => p.el.remove(), 220);
+  }
+  dropLink(it);
+
+  if (it.target) {
+    st.hits++;
+    st.score += BASE;
+    fx(it.x, it.y, '+' + BASE, 'var(--accent)');
+    if (it.ch === WORD[st.seq]) {
+      SFX.hit(st.seq);
+      st.seq++;
+    } else {
+      SFX.hitOff();
+      if (st.seq > 0 || st.chain > 0) st.chain = 0;
+      st.seq = it.ch === 'メ' ? 1 : 0;
+    }
+    if (st.seq === 4) {
+      st.seq = 0; st.chain++; st.seqDone++;
+      st.maxChain = Math.max(st.maxChain, st.chain);
+      const bonus = SEQ_BONUS * st.chain;
+      st.score += bonus;
+      banner('メンスト', (st.chain > 1 ? `${st.chain}連続 ` : '') + '+' + bonus.toLocaleString(), 'var(--gold)');
+      SFX.combo(st.chain);
+    }
+  } else {
+    st.miss++; st.seq = 0; st.chain = 0;
+    st.score = Math.max(0, st.score - FAKE_PENALTY);
+    fx(it.x, it.y, '−' + FAKE_PENALTY, 'var(--bad)');
+    SFX.wrong();
+    field.classList.remove('shake'); void field.offsetWidth; field.classList.add('shake');
+    field.classList.add('flashbad'); setTimeout(() => field.classList.remove('flashbad'), 200);
+    buzz();
+  }
+  drawHud();
+}
+
+function expire(it){
+  kill(it); it.el.remove();
+  if (it.partner && !it.partner.dead) return;
+  dropLink(it);
+}
+
+function frame(now){
+  if (!running) return;
+  const dt = Math.min(50, now - last); last = now;
+  const el = now - startT, t = Math.min(1, el / DUR);
+  if (el >= DUR) { endGame(); return; }
+  $('timefill').style.transform = `scaleX(${1 - t})`;
+  $('timebar').classList.toggle('hurry', DUR - el < 5000);
+  bgm.bpm = DUR - el < 5000 ? 172 : 140 + 22 * t;
+
+  if (now >= nextSpawn) {
+    if (t > 0.08 && Math.random() < 0.18 + 0.12 * t) spawnPair(t);
+    else spawnSingle(t);
+    nextSpawn = now + (650 - 370 * t) * rand(0.75, 1.3);
+  }
+  const W = field.clientWidth, H = field.clientHeight;
+  for (const it of items.slice()) {
+    if (it.dead) continue;
+    const age = now - it.born;
+    if (it.kind === 'pop') {
+      if (age > it.life) { expire(it); continue; }
+      const sIn = Math.min(1, age / 110);
+      const fade = Math.min(1, (it.life - age) / 160);
+      place(it, 0.5 + 0.5 * sIn, fade);
+    } else if (it.kind === 'dash' || it.kind === 'zig') {
+      it.x += it.vx * dt;
+      if (it.kind === 'zig') {
+        it.y += it.vy * dt;
+        const p = it.size/2;
+        if (it.y < p) { it.y = p; it.vy = Math.abs(it.vy); }
+        if (it.y > H - p) { it.y = H - p; it.vy = -Math.abs(it.vy); }
+      }
+      if ((it.vx > 0 && it.x > W + it.size) || (it.vx < 0 && it.x < -it.size)) { expire(it); continue; }
+      place(it, 1, 1);
+    } else {
+      it.y += it.vy * dt;
+      it.x = it.x0 + Math.sin(age / 280) * it.amp;
+      if (it.y < -it.size) { expire(it); continue; }
+      place(it, 1, 1);
+    }
+    if (it.link && it.partner && !it.partner.dead) drawLink(it);
+  }
+  requestAnimationFrame(frame);
+}
+
+function endGame(){
+  running = false;
+  items.forEach(it => it.el.remove()); items = [];
+  field.querySelectorAll('.link').forEach(n => n.remove());
+  banner('TIME UP', null, 'var(--ink)'); stopBgm(); SFX.timeup();
+  // 終了した瞬間に登録を始める（結果画面が出るころには反映済み）
+  lastResult = { name: nick, score: st.score, hits: st.hits, at: Date.now() };
+  const saving = saveScore(lastResult);
+  setTimeout(() => {
+    $('resName').textContent = nick;
+    $('resScore').textContent = st.score.toLocaleString();
+    $('stHit').textContent = st.hits;
+    $('stMiss').textContent = st.miss;
+    $('stSeq').textContent = st.seqDone;
+    $('stChain').textContent = st.maxChain;
+    $('resRank').textContent = '';
+    show('result');
+    renderBoards();
+    saving.then(renderBoards);
+  }, 700);
+}
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopBgm(); });
+renderBoards();
+initRanking();
+
+</script>
+</body>
+</html>
